@@ -18,17 +18,47 @@
 pip install -r requirements.txt
 ```
 
-3. Скачайте Microsoft Edge WebDriver:
-   - Перейдите на [официальный сайт Microsoft Edge WebDriver](https://developer.microsoft.com/en-us/microsoft-edge/tools/webdriver/)
-   - Скачайте версию, соответствующую вашему браузеру Edge
-   - Поместите `msedgedriver.exe` в папку с проектом
+3. Скачайте WebDriver для вашего браузера:
+
+### Для Microsoft Edge:
+- Перейдите на [официальный сайт Microsoft Edge WebDriver](https://developer.microsoft.com/en-us/microsoft-edge/tools/webdriver/)
+- Скачайте версию, соответствующую вашему браузеру Edge
+- Поместите `msedgedriver.exe` в папку с проектом
+
+### Для Google Chrome (альтернатива):
+- Перейдите на [официальный сайт ChromeDriver](https://chromedriver.chromium.org/)
+- Скачайте версию, соответствующую вашему браузеру Chrome
+- Поместите `chromedriver.exe` в папку с проектом
 
 ## Использование
 
-Запустите парсер:
+### Основная версия (Edge):
 ```bash
 python parser-console.py
 ```
+
+### Альтернативная версия (Chrome):
+```bash
+python parser-console-chrome.py
+```
+
+## Решение проблем
+
+### Ошибка "WebDriverException: Message:"
+Эта ошибка обычно возникает из-за проблем с WebDriver. Решения:
+
+1. **Убедитесь, что версия WebDriver соответствует версии браузера**
+2. **Поместите WebDriver в папку с проектом**
+3. **Попробуйте альтернативную версию с Chrome**
+4. **Перезапустите компьютер после установки WebDriver**
+
+### Если Edge не работает:
+- Попробуйте версию с Chrome: `python parser-console-chrome.py`
+- Убедитесь, что Microsoft Edge установлен и обновлен
+
+### Если Chrome не работает:
+- Попробуйте основную версию с Edge: `python parser-console.py`
+- Убедитесь, что Google Chrome установлен и обновлен
 
 ## Структура данных
 
@@ -44,10 +74,12 @@ python parser-console.py
 
 ## Результат
 
-Данные сохраняются в файл `products_with_status.xlsx` в той же папке.
+- **Edge версия**: данные сохраняются в `products_with_status.xlsx`
+- **Chrome версия**: данные сохраняются в `products_with_status_chrome.xlsx`
 
 ## Примечания
 
 - Парсер работает в headless режиме (без открытия окна браузера)
-- При возникновении ошибок с WebDriver, убедитесь что версия драйвера соответствует версии браузера Edge
+- При возникновении ошибок с WebDriver, используйте альтернативную версию
 - Для корректной работы требуется стабильное интернет-соединение
+- Если одна версия не работает, попробуйте другую
