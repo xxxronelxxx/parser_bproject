@@ -4,10 +4,12 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.microsoft import EdgeChromiumDriverManager
+# Убираем автоматическую загрузку драйвера
+# from webdriver_manager.microsoft import EdgeChromiumDriverManager
 import time
 import pandas as pd
 import re
+import os
 
 # Для красивого вывода в консоль
 from rich.console import Console
@@ -29,8 +31,34 @@ def setup_browser():
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-
-    service = EdgeService(EdgeChromiumDriverManager().install())
+    
+    # Используем локальный драйвер Edge вместо автоматической загрузки
+    # Путь к драйверу Edge (может потребоваться изменить)
+    edge_driver_path = "msedgedriver.exe"  # Предполагаем, что драйвер в той же папке
+    
+    if os.path.exists(edge_driver_path):
+        service = EdgeService(edge_driver_path)
+    else:
+        # Альтернативные пути для Windows
+        possible_paths = [
+            "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedgedriver.exe",
+            "C:\\Program Files\\Microsoft\\Edge\\Application\\msedgedriver.exe",
+            os.path.expanduser("~\\AppData\\Local\\Microsoft\\Edge\\Application\\msedgedriver.exe")
+        ]
+        
+        edge_driver_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                edge_driver_path = path
+                break
+        
+        if edge_driver_path:
+            service = EdgeService(edge_driver_path)
+        else:
+            # Если драйвер не найден, используем системный путь
+            console.print("[yellow]⚠️ Локальный драйвер Edge не найден, используем системный путь")
+            service = EdgeService()
+    
     driver = webdriver.Edge(service=service, options=options)
     return driver
 
@@ -100,7 +128,8 @@ def main():
 
             # Этап 5: Парсинг товаров
             task5 = progress.add_task("[red]Парсинг товаров...", total=100)
-            product_elements = driver.find_elements(By.CSS_SELECTOR, ".line .product")
+            # Обновляем селектор для карточек товаров
+            product_elements = driver.find_elements(By.CSS_SELECTOR, ".product")
             total_products = len(product_elements)
             console.print(f"[green]📊 Найдено товаров: [bold]{total_products}[/bold]")
 
@@ -108,8 +137,9 @@ def main():
 
             for idx, product in enumerate(product_elements):
                 try:
+                    # Обновленный парсинг названия товара - убираем ссылку
                     name_elem = product.find_element(By.CSS_SELECTOR, ".title a")
-                    name = name_elem.text
+                    name = name_elem.text.strip()  # Только текст без ссылки
                     link = name_elem.get_attribute("href")
 
                     try:
@@ -122,18 +152,24 @@ def main():
                     except:
                         article = "Не указан"
 
+                    # Обновленный парсинг цены
                     try:
-                        price = product.find_element(By.CSS_SELECTOR, ".price").text
+                        price_elem = product.find_element(By.CSS_SELECTOR, ".price-line .price")
+                        price = price_elem.text.strip()
                     except:
                         price = "Не указана"
 
+                    # Обновленный парсинг статуса
                     try:
-                        status = product.find_element(By.CSS_SELECTOR, ".status").text
+                        status_elem = product.find_element(By.CSS_SELECTOR, ".par.s .v")
+                        status = status_elem.text.strip()
                     except:
                         status = "Не указан"
 
+                    # Обновленный парсинг бренда
                     try:
-                        brand = product.find_element(By.CLASS_NAME, "brandLine").text
+                        brand_elem = product.find_element(By.CSS_SELECTOR, ".par.b .v")
+                        brand = brand_elem.text.strip()
                     except:
                         brand = "Не указан"
 
@@ -151,6 +187,7 @@ def main():
                     })
 
                 except Exception as e:
+                    console.print(f"[yellow]⚠️ Ошибка при парсинге товара {idx+1}: {e}")
                     continue  # Пропускаем товар, если не получилось спарсить
 
                 progress.update(task5, advance=100 / total_products)
