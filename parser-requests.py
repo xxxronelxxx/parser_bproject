@@ -198,18 +198,20 @@ class NovaskladParser:
             for i, child in enumerate(children[:10]):
                 console.print(f"[blue]     {i+1}. {child.name}.{' '.join(child.get('class', []))}")
         
+        # Локальная дедупликация в пределах одной страницы (по ссылке)
+        local_seen_links = set()
+        
         for idx, product in enumerate(found_products):
             try:
                 console.print(f"[blue]🔍 Парсим товар {idx+1}...")
                 product_data = self.parse_product_element(product)
                 if product_data:
-                    # Дедуп по ссылке товара, если ссылка определена
                     product_link = product_data.get('link')
-                    if product_link and product_link in self.seen_product_links:
-                        console.print(f"[yellow]⚠️ Дубликат товара пропущен: {product_link}")
+                    if product_link and product_link in local_seen_links:
+                        console.print(f"[yellow]⚠️ Дубликат в рамках страницы пропущен: {product_link}")
                     else:
                         if product_link:
-                            self.seen_product_links.add(product_link)
+                            local_seen_links.add(product_link)
                         products.append(product_data)
                         console.print(f"[green]✅ Товар {idx+1}: {product_data['name'][:50]}...")
                 else:
@@ -493,19 +495,7 @@ class NovaskladParser:
                 # Парсим товары на странице
                 page_products = self.parse_catalog_page(html_content)
                 
-                if not page_products:
-                    console.print(f"[yellow]⚠️ На странице {page_number} товары не найдены")
-                    # Попытка взять следующую ссылку
-                    soup_tmp = BeautifulSoup(html_content, 'html.parser')
-                    next_url_try = self.extract_next_page_url(soup_tmp, current_url)
-                    if not next_url_try:
-                        break
-                    current_url = next_url_try
-                    page_number += 1
-                    time.sleep(1)
-                    continue
-                
-                # Добавляем только новые товары
+                # Подсчитываем сколько новых добавим
                 new_count = 0
                 for p in page_products:
                     link = p.get('link')
