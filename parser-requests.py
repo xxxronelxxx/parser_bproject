@@ -97,14 +97,7 @@ class NovaskladParser:
             console.print(f"[red]❌ Ошибка подключения: {e}")
             return False
     
-    def save_html_for_debug(self, html_content, filename="debug_page.html"):
-        """Сохраняем HTML страницу для отладки"""
-        try:
-            with open(filename, 'w', encoding='utf-8') as f:
-                f.write(html_content)
-            console.print(f"[blue]💾 HTML страница сохранена в {filename} для отладки")
-        except Exception as e:
-            console.print(f"[yellow]⚠️ Не удалось сохранить HTML: {e}")
+
     
     def get_page_content(self, url, description=""):
         """Получаем содержимое страницы"""
@@ -119,9 +112,7 @@ class NovaskladParser:
             
             console.print(f"[green]✅ Страница загружена: {len(response.text)} символов")
             
-            # Сохраняем HTML для отладки на первой странице
-            if 'Страница 1' in description:
-                self.save_html_for_debug(response.text)
+
             
             return response.text
             
@@ -661,10 +652,7 @@ class NovaskladParser:
             login_page = self.session.get("https://novasklad.kz/sign/", timeout=30)
             login_page.raise_for_status()
             
-            # Сохраняем страницу авторизации для отладки
-            with open("login_page.html", "w", encoding="utf-8") as f:
-                f.write(login_page.text)
-            console.print("[blue]💾 Страница авторизации сохранена в login_page.html")
+
             
             # Парсим страницу для поиска CSRF токена и формы
             soup = BeautifulSoup(login_page.text, 'html.parser')
@@ -742,10 +730,7 @@ class NovaskladParser:
                     
                     console.print(f"[blue]📥 Ответ: статус {auth_response.status_code}, URL: {auth_response.url}")
                     
-                    # Сохраняем ответ для отладки
-                    with open(f"auth_response_{i+1}.html", "w", encoding="utf-8") as f:
-                        f.write(auth_response.text)
-                    console.print(f"[blue]💾 Ответ сохранен в auth_response_{i+1}.html")
+
                     
                     # Проверяем успешность
                     if auth_response.status_code in [301, 302, 303, 307, 308]:
@@ -796,9 +781,7 @@ class NovaskladParser:
                         console.print(f"[blue]📥 Финальный ответ: статус {auth_response_final.status_code}")
                         console.print(f"[blue]📥 Финальный URL: {auth_response_final.url}")
                         
-                        # Сохраняем финальный ответ
-                        with open("auth_response_final.html", "w", encoding="utf-8") as f:
-                            f.write(auth_response_final.text)
+
                         
                         if "Войти" not in auth_response_final.text and "Авторизоваться" not in auth_response_final.text:
                             console.print("[green]✅ Авторизация успешна при повторной попытке!")
