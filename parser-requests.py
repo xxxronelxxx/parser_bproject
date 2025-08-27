@@ -61,6 +61,15 @@ class NovaskladParser:
             console.print(f"[red]❌ Ошибка подключения: {e}")
             return False
     
+    def save_html_for_debug(self, html_content, filename="debug_page.html"):
+        """Сохраняем HTML страницу для отладки"""
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            console.print(f"[blue]💾 HTML страница сохранена в {filename} для отладки")
+        except Exception as e:
+            console.print(f"[yellow]⚠️ Не удалось сохранить HTML: {e}")
+    
     def get_page_content(self, url, description=""):
         """Получаем содержимое страницы"""
         try:
@@ -73,6 +82,11 @@ class NovaskladParser:
                 response.encoding = 'utf-8'
             
             console.print(f"[green]✅ Страница загружена: {len(response.text)} символов")
+            
+            # Сохраняем HTML для отладки на первой странице
+            if 'Страница 1' in description:
+                self.save_html_for_debug(response.text)
+            
             return response.text
             
         except requests.exceptions.RequestException as e:
@@ -139,12 +153,29 @@ class NovaskladParser:
         
         console.print(f"[green]📊 Парсим {len(found_products)} товаров...")
         
+        # Показываем структуру первого найденного элемента для отладки
+        if found_products:
+            first_product = found_products[0]
+            console.print(f"[blue]🔍 Структура первого элемента '{used_selector}':")
+            console.print(f"[blue]   Tag: {first_product.name}")
+            console.print(f"[blue]   Classes: {first_product.get('class', [])}")
+            console.print(f"[blue]   ID: {first_product.get('id', 'Нет')}")
+            
+            # Показываем дочерние элементы
+            children = first_product.find_all(recursive=False)
+            console.print(f"[blue]   Дочерние элементы: {len(children)}")
+            for i, child in enumerate(children[:10]):
+                console.print(f"[blue]     {i+1}. {child.name}.{' '.join(child.get('class', []))}")
+        
         for idx, product in enumerate(found_products):
             try:
+                console.print(f"[blue]🔍 Парсим товар {idx+1}...")
                 product_data = self.parse_product_element(product)
                 if product_data:
                     products.append(product_data)
                     console.print(f"[green]✅ Товар {idx+1}: {product_data['name'][:50]}...")
+                else:
+                    console.print(f"[yellow]⚠️ Товар {idx+1}: не удалось извлечь данные")
                 
             except Exception as e:
                 console.print(f"[yellow]⚠️ Ошибка парсинга товара {idx+1}: {e}")
@@ -155,14 +186,28 @@ class NovaskladParser:
     def parse_product_element(self, product_elem):
         """Парсим отдельный товар"""
         try:
+            console.print(f"[blue]     🔍 Анализируем структуру товара...")
+            
+            # Показываем HTML структуру элемента для отладки
+            html_preview = str(product_elem)[:500]
+            console.print(f"[blue]     HTML (начало): {html_preview}...")
+            
             # Название товара
             name = self.extract_text(product_elem, [
                 '.title a',
                 '.title',
                 'h3',
                 'h4',
-                'a[href*="/catalog/"]'
+                'a[href*="/catalog/"]',
+                'a',
+                '.name',
+                '.product-name'
             ])
+            
+            if name:
+                console.print(f"[green]     ✅ Название найдено: {name[:50]}...")
+            else:
+                console.print(f"[yellow]     ⚠️ Название не найдено")
             
             # Ссылка на товар
             link = self.extract_href(product_elem, [
@@ -174,14 +219,25 @@ class NovaskladParser:
             if link and not link.startswith('http'):
                 link = urljoin(self.base_url, link)
             
+            if link:
+                console.print(f"[green]     ✅ Ссылка найдена: {link}")
+            else:
+                console.print(f"[yellow]     ⚠️ Ссылка не найдена")
+            
             # Цена
             price = self.extract_text(product_elem, [
                 '.price-line .price',
                 '.price',
                 '[class*="price"]',
                 '.cost',
-                '.price-value'
+                '.price-value',
+                '.price-amount'
             ])
+            
+            if price:
+                console.print(f"[green]     ✅ Цена найдена: {price}")
+            else:
+                console.print(f"[yellow]     ⚠️ Цена не найдена")
             
             # Статус
             status = self.extract_text(product_elem, [
@@ -189,8 +245,14 @@ class NovaskladParser:
                 '.status',
                 '[class*="status"]',
                 '.availability',
-                '.stock'
+                '.stock',
+                '.in-stock'
             ])
+            
+            if status:
+                console.print(f"[green]     ✅ Статус найден: {status}")
+            else:
+                console.print(f"[yellow]     ⚠️ Статус не найден")
             
             # Бренд
             brand = self.extract_text(product_elem, [
@@ -198,16 +260,28 @@ class NovaskladParser:
                 '.brand',
                 '[class*="brand"]',
                 '.brandLine',
-                '.manufacturer'
+                '.manufacturer',
+                '.vendor'
             ])
+            
+            if brand:
+                console.print(f"[green]     ✅ Бренд найден: {brand}")
+            else:
+                console.print(f"[yellow]     ⚠️ Бренд не найден")
             
             # Описание
             description = self.extract_text(product_elem, [
                 '.description',
                 '.desc',
                 '.text',
-                '[class*="description"]'
+                '[class*="description"]',
+                '.product-desc'
             ])
+            
+            if description:
+                console.print(f"[green]     ✅ Описание найдено: {description[:50]}...")
+            else:
+                console.print(f"[yellow]     ⚠️ Описание не найдено")
             
             # Артикул
             article = self.extract_text(product_elem, [
@@ -215,17 +289,25 @@ class NovaskladParser:
                 '.articleLine',
                 '.sku',
                 '[class*="article"]',
-                '.code'
+                '.code',
+                '.product-code'
             ])
+            
+            if article:
+                console.print(f"[green]     ✅ Артикул найден: {article}")
+            else:
+                console.print(f"[yellow]     ⚠️ Артикул не найден")
             
             # Дополнительный артикул из названия
             additional_article = self.extract_article_from_name(name)
             
             # Если название не найдено, пропускаем товар
             if not name or name.strip() == "":
+                console.print(f"[red]     ❌ Товар пропущен: нет названия")
                 return None
             
-            return {
+            # Создаем словарь с данными
+            product_data = {
                 'name': name.strip(),
                 'link': link,
                 'price': price.strip() if price else 'Не указана',
@@ -236,8 +318,11 @@ class NovaskladParser:
                 'additional_article': additional_article
             }
             
+            console.print(f"[green]     ✅ Товар успешно обработан")
+            return product_data
+            
         except Exception as e:
-            console.print(f"[yellow]⚠️ Ошибка парсинга элемента: {e}")
+            console.print(f"[red]     ❌ Ошибка парсинга элемента: {e}")
             return None
     
     def extract_text(self, element, selectors):
@@ -246,9 +331,40 @@ class NovaskladParser:
             try:
                 found = element.select_one(selector)
                 if found and found.get_text(strip=True):
-                    return found.get_text(strip=True)
-            except:
+                    text = found.get_text(strip=True)
+                    if text and len(text) > 0:
+                        return text
+            except Exception as e:
+                console.print(f"[yellow]       ⚠️ Ошибка с селектором '{selector}': {e}")
                 continue
+        
+        # Если селекторы не сработали, пробуем найти любой текст в элементе
+        try:
+            # Ищем все ссылки
+            links = element.find_all('a')
+            for link in links:
+                text = link.get_text(strip=True)
+                if text and len(text) > 0:
+                    return text
+            
+            # Ищем заголовки
+            headers = element.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+            for header in headers:
+                text = header.get_text(strip=True)
+                if text and len(text) > 0:
+                    return text
+            
+            # Ищем любой текст в элементе
+            text = element.get_text(strip=True)
+            if text and len(text) > 0:
+                # Убираем лишние пробелы и переносы
+                text = ' '.join(text.split())
+                if len(text) > 0:
+                    return text
+                    
+        except Exception as e:
+            console.print(f"[yellow]       ⚠️ Ошибка при поиске текста: {e}")
+        
         return None
     
     def extract_href(self, element, selectors):
@@ -257,9 +373,27 @@ class NovaskladParser:
             try:
                 found = element.select_one(selector)
                 if found and found.get('href'):
-                    return found.get('href')
-            except:
+                    href = found.get('href')
+                    if href and href != '#':
+                        return href
+            except Exception as e:
+                console.print(f"[yellow]       ⚠️ Ошибка с селектором '{selector}': {e}")
                 continue
+        
+        # Если селекторы не сработали, пробуем найти любую ссылку
+        try:
+            # Ищем все ссылки в элементе
+            links = element.find_all('a')
+            for link in links:
+                href = link.get('href')
+                if href and href != '#' and href.startswith('/'):
+                    return href
+                elif href and href != '#' and 'catalog' in href:
+                    return href
+                    
+        except Exception as e:
+            console.print(f"[yellow]       ⚠️ Ошибка при поиске ссылок: {e}")
+        
         return None
     
     def extract_article_from_name(self, name):
