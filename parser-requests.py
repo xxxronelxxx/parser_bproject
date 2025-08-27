@@ -10,7 +10,7 @@ import pandas as pd
 import time
 import re
 import json
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlencode, parse_qsl, urlunparse
 import os
 
 # Для красивого вывода
@@ -47,9 +47,10 @@ class NovaskladParser:
         # Список для хранения товаров
         self.products = []
         
-        # Множества для защиты от дублей и циклов
+        # Множества и параметры фильтров
         self.visited_pages = set()
         self.seen_product_links = set()
+        self.filter_params = {}
         
         # Данные для авторизации
         self.login = "+77025757606"
@@ -470,6 +471,9 @@ class NovaskladParser:
         except Exception as e:
             console.print(f"[yellow]⚠️ Не удалось проверить авторизацию: {e}")
         
+        # Включаем фильтры 'В пути' и 'Под заказ'
+        self.enable_status_filters()
+        
         all_products = []
         current_url = self.catalog_url
         max_pages = 100  # Жёсткий предел на всякий случай
@@ -520,6 +524,9 @@ class NovaskladParser:
                 if not next_url:
                     console.print(f"[green]✅ Достигнут конец каталога на странице {page_number}")
                     break
+                
+                # Гарантируем сохранение параметров фильтров в ссылке
+                next_url = self._merge_filter_params(next_url)
                 
                 # Если next ведет на уже посещенную страницу, прерываем
                 if next_url in self.visited_pages:
@@ -869,6 +876,72 @@ class NovaskladParser:
                     return next_url
         
         return None
+
+    def enable_status_filters(self):
+        """Активируем фильтры 'В пути' (v481) и 'Под заказ' (v259) через параметры URL."""
+        try:
+            console.print("[blue]🔧 Включаем фильтры 'В пути' и 'Под заказ'")
+            resp = self.session.get(self.catalog_url, timeout=30)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            
+            # Ищем чекбоксы по id из label: v481, v259
+            target_ids = {"v481", "v259"}
+            found_params = []  # список кортежей (name, value)
+            for input_tag in soup.find_all('input', {'type': 'checkbox'}):
+                input_id = input_tag.get('id')
+                if input_id in target_ids:
+                    name = input_tag.get('name') or 'v[]'
+                    value = input_tag.get('value') or re.sub(r'\D+', '', input_id or '')
+                    if value:
+                        found_params.append((name, value))
+            
+            # Если не нашли, используем типичный формат
+            if not found_params:
+                found_params = [("v[]", "481"), ("v[]", "259")]
+            
+            # Сливаем параметры с существующими
+            self.catalog_url = self._merge_params_into_url(self.catalog_url, found_params)
+            
+            # Сохраняем плоский вид параметров для последующих страниц
+            self.filter_params = {}
+            for name, value in found_params:
+                self.filter_params.setdefault(name, []).append(value)
+            
+            console.print(f"[green]✅ Фильтры активированы. URL: {self.catalog_url}")
+        except Exception as e:
+            console.print(f"[yellow]⚠️ Не удалось активировать фильтры: {e}")
+            # продолжаем без ошибок
+            
+    def _merge_params_into_url(self, url: str, params_list: list):
+        """Добавляет список (name,value) параметров в URL, сохраняя уже существующие значения."""
+        parsed = urlparse(url)
+        query_pairs = parse_qsl(parsed.query, keep_blank_values=True)
+        query_pairs.extend(params_list)
+        new_query = urlencode(query_pairs, doseq=True)
+        return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
+    
+    def _merge_filter_params(self, url: str):
+        """Добавляет сохранённые параметры фильтров к URL при пагинации, если они отсутствуют."""
+        if not self.filter_params:
+            return url
+        parsed = urlparse(url)
+        existing = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        # Если уже есть хотя бы один фильтр по ключу, считаем что сохранены
+        need_merge = True
+        for key in self.filter_params.keys():
+            if key in existing:
+                need_merge = False
+                break
+        if not need_merge:
+            return url
+        # Мерджим
+        query_pairs = parse_qsl(parsed.query, keep_blank_values=True)
+        for key, values in self.filter_params.items():
+            for v in values:
+                query_pairs.append((key, v))
+        new_query = urlencode(query_pairs, doseq=True)
+        return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
 
 
 def main():
