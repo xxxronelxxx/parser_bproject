@@ -25,7 +25,9 @@ class NovaskladParser:
     def __init__(self):
         self.session = requests.Session()
         self.base_url = "https://novasklad.kz"
-        self.catalog_url = "https://novasklad.kz/catalog/kitchen-mixers/"
+        
+        # Загружаем ссылку на категорию из файла cat.txt
+        self.catalog_url = self.load_catalog_url()
         
         # Заголовки для имитации браузера
         self.headers = {
@@ -48,6 +50,35 @@ class NovaskladParser:
         # Данные для авторизации
         self.login = "+77025757606"
         self.password = "681660"
+    
+    def load_catalog_url(self):
+        """Загружаем ссылку на категорию из файла cat.txt"""
+        try:
+            if os.path.exists('cat.txt'):
+                with open('cat.txt', 'r', encoding='utf-8') as f:
+                    url = f.read().strip()
+                    if url:
+                        console.print(f"[green]✅ Загружена ссылка на категорию: {url}")
+                        return url
+                    else:
+                        console.print("[yellow]⚠️ Файл cat.txt пустой, используем ссылку по умолчанию")
+            else:
+                console.print("[yellow]⚠️ Файл cat.txt не найден, создаем с ссылкой по умолчанию")
+                # Создаем файл с ссылкой по умолчанию
+                default_url = "https://novasklad.kz/catalog/kitchen-mixers/"
+                with open('cat.txt', 'w', encoding='utf-8') as f:
+                    f.write(default_url)
+                console.print(f"[blue]📝 Создан файл cat.txt с ссылкой: {default_url}")
+                return default_url
+        except Exception as e:
+            console.print(f"[red]❌ Ошибка при загрузке cat.txt: {e}")
+            # Возвращаем ссылку по умолчанию
+            default_url = "https://novasklad.kz/catalog/kitchen-mixers/"
+            console.print(f"[blue]📝 Используем ссылку по умолчанию: {default_url}")
+            return default_url
+        
+        # Если что-то пошло не так, возвращаем ссылку по умолчанию
+        return "https://novasklad.kz/catalog/kitchen-mixers/"
     
     def test_connection(self):
         """Тестируем подключение к сайту"""
