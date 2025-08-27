@@ -1,0 +1,49 @@
+🚀 ПРОСТАЯ СБОРКА EXE ФАЙЛА - ПОШАГОВАЯ ИНСТРУКЦИЯ
+====================================================
+
+❌ ПРОБЛЕМА: BAT файлы не работают корректно
+✅ РЕШЕНИЕ: Сборка вручную через командную строку
+
+📋 ШАГИ ДЛЯ СБОРКИ:
+
+1️⃣ ОТКРОЙТЕ КОМАНДНУЮ СТРОКУ:
+   - Нажмите Win + R
+   - Введите: cmd
+   - Нажмите Enter
+   - Перейдите в папку с проектом: cd /d D:\work\b-project.kz\git_parser
+
+2️⃣ УСТАНОВИТЕ PYINSTALLER:
+   pip install pyinstaller
+
+3️⃣ УСТАНОВИТЕ ЗАВИСИМОСТИ:
+   pip install -r requirements-requests.txt
+
+4️⃣ СОБЕРИТЕ EXE (скопируйте и вставьте эту команду):
+   pyinstaller --onefile --name=NovaskladParser --console --hidden-import=bs4 --hidden-import=bs4.builder --hidden-import=bs4.builder._lxml --hidden-import=lxml --hidden-import=lxml.etree --hidden-import=lxml.html --hidden-import=pandas --hidden-import=openpyxl --hidden-import=rich --hidden-import=rich.console --hidden-import=rich.progress --hidden-import=rich.panel --hidden-import=rich.table --hidden-import=requests --hidden-import=urllib3 --hidden-import=certifi --hidden-import=charset_normalizer --hidden-import=idna --hidden-import=chardet parser-requests.py
+
+5️⃣ КОПИРУЙТЕ EXE ФАЙЛ:
+   copy "dist\NovaskladParser.exe" "NovaskladParser.exe"
+
+6️⃣ ОЧИСТИТЕ ВРЕМЕННЫЕ ФАЙЛЫ:
+   rmdir /s /q build
+   rmdir /s /q dist
+   del NovaskladParser.spec
+
+🎯 ГОТОВО! Теперь у вас есть NovaskladParser.exe
+
+💡 АЛЬТЕРНАТИВНЫЙ СПОСОБ (если первый не работает):
+
+pyinstaller --onefile --name=NovaskladParser parser-requests.py
+
+⚠️ ВНИМАНИЕ: Второй способ может не включить все модули,
+но попробовать стоит - иногда работает автоматически.
+
+🔍 ЕСЛИ ВСЕ ЕЩЕ НЕ РАБОТАЕТ:
+
+1. Убедитесь, что Python в PATH
+2. Попробуйте: python -m PyInstaller --onefile parser-requests.py
+3. Проверьте, что все зависимости установлены
+4. Перезапустите командную строку
+
+📞 ПОМОЩЬ: Если ничего не помогает, используйте Python скрипт:
+python build_exe_fixed.py
