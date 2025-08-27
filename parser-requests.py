@@ -630,8 +630,30 @@ class NovaskladParser:
             login_page = self.session.get("https://novasklad.kz/sign/", timeout=30)
             login_page.raise_for_status()
             
-            # Парсим страницу для поиска CSRF токена
+            # Сохраняем страницу авторизации для отладки
+            with open("login_page.html", "w", encoding="utf-8") as f:
+                f.write(login_page.text)
+            console.print("[blue]💾 Страница авторизации сохранена в login_page.html")
+            
+            # Парсим страницу для поиска CSRF токена и формы
             soup = BeautifulSoup(login_page.text, 'html.parser')
+            
+            # Ищем форму авторизации
+            form = soup.find('form')
+            if form:
+                console.print(f"[green]✅ Форма найдена: action='{form.get('action', 'Нет')}', method='{form.get('method', 'Нет')}'")
+                
+                # Ищем все поля формы
+                form_inputs = form.find_all('input')
+                console.print(f"[blue]🔍 Найдено полей в форме: {len(form_inputs)}")
+                for i, inp in enumerate(form_inputs):
+                    inp_type = inp.get('type', 'text')
+                    inp_name = inp.get('name', 'Нет')
+                    inp_value = inp.get('value', 'Нет')
+                    inp_id = inp.get('id', 'Нет')
+                    console.print(f"[blue]   {i+1}. type='{inp_type}', name='{inp_name}', value='{inp_value}', id='{inp_id}'")
+            else:
+                console.print("[yellow]⚠️ Форма не найдена")
             
             # Ищем CSRF токен в разных местах
             csrf_token = None
@@ -670,34 +692,134 @@ class NovaskladParser:
             console.print("[blue]📤 Отправляем данные авторизации...")
             console.print(f"[blue]   Логин: {self.login}")
             console.print(f"[blue]   Пароль: {'*' * len(self.password)}")
+            console.print(f"[blue]   Данные: {auth_data}")
             
-            # Выполняем POST запрос для авторизации
-            auth_response = self.session.post(
-                "https://novasklad.kz/sign/",
-                data=auth_data,
-                timeout=30,
-                allow_redirects=True
-            )
+            # Обновляем заголовки для авторизации
+            auth_headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
+                'Accept-Encoding': 'gzip, deflate',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Origin': 'https://novasklad.kz',
+                'Referer': 'https://novasklad.kz/sign/',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
+            }
             
-            console.print(f"[blue]📥 Ответ авторизации: статус {auth_response.status_code}")
-            console.print(f"[blue]📥 URL после авторизации: {auth_response.url}")
+            # Пробуем разные методы авторизации
+            auth_methods = [
+                # Метод 1: POST на /sign/
+                ("https://novasklad.kz/sign/", auth_data),
+                # Метод 2: POST на /login (если есть)
+                ("https://novasklad.kz/login", auth_data),
+                # Метод 3: POST на /auth (если есть)
+                ("https://novasklad.kz/auth", auth_data),
+                # Метод 4: POST на корневой URL
+                ("https://novasklad.kz/", auth_data)
+            ]
             
-            # Проверяем, успешна ли авторизация
-            if auth_response.status_code == 200:
-                # Проверяем содержимое ответа
-                if "Войти" in auth_response.text or "login" in auth_response.text.lower():
-                    console.print("[yellow]⚠️ Авторизация не удалась - все еще на странице входа")
+            auth_success = False
+            
+            for i, (auth_url, data) in enumerate(auth_methods):
+                try:
+                    console.print(f"[blue]🔄 Метод {i+1}: POST на {auth_url}")
+                    
+                    auth_response = self.session.post(
+                        auth_url,
+                        data=data,
+                        headers=auth_headers,
+                        timeout=30,
+                        allow_redirects=True
+                    )
+                    
+                    console.print(f"[blue]📥 Ответ: статус {auth_response.status_code}, URL: {auth_response.url}")
+                    
+                    # Сохраняем ответ для отладки
+                    with open(f"auth_response_{i+1}.html", "w", encoding="utf-8") as f:
+                        f.write(auth_response.text)
+                    console.print(f"[blue]💾 Ответ сохранен в auth_response_{i+1}.html")
+                    
+                    # Проверяем успешность
+                    if auth_response.status_code in [301, 302, 303, 307, 308]:
+                        console.print(f"[green]✅ Получен редирект - авторизация возможна")
+                        auth_success = True
+                        break
+                    elif auth_response.status_code == 200:
+                        if "Войти" not in auth_response.text and "login" not in auth_response.text.lower():
+                            console.print(f"[green]✅ Авторизация успешна!")
+                            auth_success = True
+                            break
+                        else:
+                            console.print(f"[yellow]⚠️ Все еще на странице входа")
+                    
+                    # Пауза между попытками
+                    time.sleep(1)
+                    
+                except Exception as e:
+                    console.print(f"[yellow]⚠️ Ошибка метода {i+1}: {e}")
+                    continue
+            
+            if not auth_success:
+                # Пробуем альтернативный подход - ищем кнопку submit
+                console.print("[blue]🔄 Пробуем альтернативный подход...")
+                
+                submit_button = soup.find('input', {'type': 'submit'})
+                if submit_button:
+                    submit_name = submit_button.get('name', '')
+                    submit_value = submit_button.get('value', '')
+                    console.print(f"[blue]🔍 Найдена кнопка submit: name='{submit_name}', value='{submit_value}'")
+                    
+                    # Добавляем данные кнопки
+                    if submit_name:
+                        auth_data[submit_name] = submit_value
+                    
+                    # Пробуем еще раз с обновленными данными
+                    console.print("[blue]🔄 Пробуем повторную авторизацию с кнопкой...")
+                    try:
+                        auth_response_final = self.session.post(
+                            "https://novasklad.kz/sign/",
+                            data=auth_data,
+                            headers=auth_headers,
+                            timeout=30,
+                            allow_redirects=True
+                        )
+                        
+                        console.print(f"[blue]📥 Финальный ответ: статус {auth_response_final.status_code}")
+                        console.print(f"[blue]📥 Финальный URL: {auth_response_final.url}")
+                        
+                        # Сохраняем финальный ответ
+                        with open("auth_response_final.html", "w", encoding="utf-8") as f:
+                            f.write(auth_response_final.text)
+                        
+                        if "Войти" not in auth_response_final.text:
+                            console.print("[green]✅ Авторизация успешна при повторной попытке!")
+                            auth_success = True
+                        
+                    except Exception as e:
+                        console.print(f"[red]❌ Ошибка финальной попытки: {e}")
+                
+                if not auth_success:
+                    console.print("[red]❌ Все методы авторизации не удались")
+                    return False
+            
+            # Проверяем финальный статус авторизации
+            console.print("[blue]🔍 Проверяем финальный статус авторизации...")
+            
+            try:
+                # Пробуем получить главную страницу
+                main_page = self.session.get(self.base_url, timeout=30)
+                if "Войти" in main_page.text or "login" in main_page.text.lower():
+                    console.print("[yellow]⚠️ Авторизация не подтверждена - все еще есть ссылка входа")
                     return False
                 else:
-                    console.print("[green]✅ Авторизация успешна!")
+                    console.print("[green]✅ Авторизация подтверждена!")
                     return True
-            elif auth_response.status_code in [301, 302, 303, 307, 308]:
-                # Редирект - возможно, успешная авторизация
-                console.print(f"[green]✅ Получен редирект: {auth_response.url}")
+                    
+            except Exception as e:
+                console.print(f"[yellow]⚠️ Не удалось проверить статус: {e}")
+                # Если не можем проверить, считаем что авторизация прошла
                 return True
-            else:
-                console.print(f"[yellow]⚠️ Неожиданный статус: {auth_response.status_code}")
-                return False
                 
         except Exception as e:
             console.print(f"[red]❌ Ошибка авторизации: {e}")
