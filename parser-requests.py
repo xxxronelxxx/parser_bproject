@@ -35,7 +35,8 @@ class NovaskladParser:
             'Accept-Encoding': 'gzip, deflate',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
-            'Cache-Control': 'max-age=0'
+            'Cache-Control': 'max-age=0',
+            'Referer': 'https://novasklad.kz/sign/'
         }
         
         # Применяем заголовки к сессии
@@ -44,6 +45,10 @@ class NovaskladParser:
         # Список для хранения товаров
         self.products = []
         
+        # Данные для авторизации
+        self.login = "+77025757606"
+        self.password = "681660"
+    
     def test_connection(self):
         """Тестируем подключение к сайту"""
         console.print("[blue]🔍 Тестируем подключение к сайту...")
@@ -417,6 +422,19 @@ class NovaskladParser:
         """Получаем все страницы каталога"""
         console.print("[blue]📚 Получаем все страницы каталога...")
         
+        # Проверяем, что мы авторизованы
+        console.print("[blue]🔍 Проверяем статус авторизации...")
+        try:
+            # Пробуем получить главную страницу
+            main_page = self.session.get(self.base_url, timeout=30)
+            if "Войти" in main_page.text or "login" in main_page.text.lower():
+                console.print("[red]❌ Не авторизованы! Нужно сначала войти в систему.")
+                return []
+            else:
+                console.print("[green]✅ Авторизация подтверждена")
+        except Exception as e:
+            console.print(f"[yellow]⚠️ Не удалось проверить авторизацию: {e}")
+        
         all_products = []
         page = 1
         max_pages = 50  # Ограничиваем количество страниц
@@ -556,8 +574,19 @@ class NovaskladParser:
                 transient=True
             ) as progress:
                 
-                # Задача 1: Получение всех страниц
-                task1 = progress.add_task("[green]Получение страниц каталога...", total=100)
+                # Задача 1: Авторизация
+                task1 = progress.add_task("[green]Авторизация на сайте...", total=100)
+                
+                # Выполняем авторизацию
+                if not self.authenticate():
+                    console.print("[red]❌ Авторизация не удалась! Парсинг невозможен.")
+                    return
+                
+                progress.update(task1, completed=100)
+                console.print("[green]✔️ Авторизация завершена")
+                
+                # Задача 2: Получение всех страниц
+                task2 = progress.add_task("[blue]Получение страниц каталога...", total=100)
                 
                 # Получаем все товары
                 all_products = self.get_all_pages()
@@ -566,15 +595,15 @@ class NovaskladParser:
                     console.print("[red]❌ Не удалось получить товары!")
                     return
                 
-                progress.update(task1, completed=100)
+                progress.update(task2, completed=100)
                 
-                # Задача 2: Сохранение данных
-                task2 = progress.add_task("[blue]Сохранение данных...", total=100)
+                # Задача 3: Сохранение данных
+                task3 = progress.add_task("[purple]Сохранение данных...", total=100)
                 
                 # Сохраняем в Excel
                 success = self.save_to_excel(all_products)
                 
-                progress.update(task2, completed=100)
+                progress.update(task3, completed=100)
                 
                 if success:
                     console.print(Panel(f"[bold green]✅ Парсинг завершен успешно! Спарсено {len(all_products)} товаров", expand=False))
@@ -588,7 +617,91 @@ class NovaskladParser:
             console.print("[yellow]Попробуйте:")
             console.print("1. Проверить интернет-соединение")
             console.print("2. Убедиться, что сайт доступен")
-            console.print("3. Проверить, что все библиотеки установлены")
+            console.print("3. Проверить логин и пароль")
+            console.print("4. Проверить, что все библиотеки установлены")
+
+    def authenticate(self):
+        """Авторизация на сайте"""
+        console.print("[blue]🔐 Выполняем авторизацию...")
+        
+        try:
+            # Сначала получаем страницу авторизации для получения CSRF токена
+            console.print("[blue]📄 Получаем страницу авторизации...")
+            login_page = self.session.get("https://novasklad.kz/sign/", timeout=30)
+            login_page.raise_for_status()
+            
+            # Парсим страницу для поиска CSRF токена
+            soup = BeautifulSoup(login_page.text, 'html.parser')
+            
+            # Ищем CSRF токен в разных местах
+            csrf_token = None
+            csrf_selectors = [
+                'input[name="_token"]',
+                'input[name="csrf_token"]',
+                'input[name="token"]',
+                'meta[name="csrf-token"]',
+                'input[type="hidden"]'
+            ]
+            
+            for selector in csrf_selectors:
+                try:
+                    csrf_elem = soup.select_one(selector)
+                    if csrf_elem:
+                        if csrf_elem.name == 'meta':
+                            csrf_token = csrf_elem.get('content')
+                        else:
+                            csrf_token = csrf_elem.get('value')
+                        if csrf_token:
+                            console.print(f"[green]✅ CSRF токен найден: {csrf_token[:20]}...")
+                            break
+                except:
+                    continue
+            
+            # Формируем данные для авторизации
+            auth_data = {
+                'login': self.login,
+                'password': self.password
+            }
+            
+            # Добавляем CSRF токен если найден
+            if csrf_token:
+                auth_data['_token'] = csrf_token
+            
+            console.print("[blue]📤 Отправляем данные авторизации...")
+            console.print(f"[blue]   Логин: {self.login}")
+            console.print(f"[blue]   Пароль: {'*' * len(self.password)}")
+            
+            # Выполняем POST запрос для авторизации
+            auth_response = self.session.post(
+                "https://novasklad.kz/sign/",
+                data=auth_data,
+                timeout=30,
+                allow_redirects=True
+            )
+            
+            console.print(f"[blue]📥 Ответ авторизации: статус {auth_response.status_code}")
+            console.print(f"[blue]📥 URL после авторизации: {auth_response.url}")
+            
+            # Проверяем, успешна ли авторизация
+            if auth_response.status_code == 200:
+                # Проверяем содержимое ответа
+                if "Войти" in auth_response.text or "login" in auth_response.text.lower():
+                    console.print("[yellow]⚠️ Авторизация не удалась - все еще на странице входа")
+                    return False
+                else:
+                    console.print("[green]✅ Авторизация успешна!")
+                    return True
+            elif auth_response.status_code in [301, 302, 303, 307, 308]:
+                # Редирект - возможно, успешная авторизация
+                console.print(f"[green]✅ Получен редирект: {auth_response.url}")
+                return True
+            else:
+                console.print(f"[yellow]⚠️ Неожиданный статус: {auth_response.status_code}")
+                return False
+                
+        except Exception as e:
+            console.print(f"[red]❌ Ошибка авторизации: {e}")
+            return False
 
 
 def main():
