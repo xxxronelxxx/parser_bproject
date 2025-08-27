@@ -47,6 +47,10 @@ class NovaskladParser:
         # Список для хранения товаров
         self.products = []
         
+        # Множества для защиты от дублей и циклов
+        self.visited_pages = set()
+        self.seen_product_links = set()
+        
         # Данные для авторизации
         self.login = "+77025757606"
         self.password = "681660"
@@ -199,8 +203,15 @@ class NovaskladParser:
                 console.print(f"[blue]🔍 Парсим товар {idx+1}...")
                 product_data = self.parse_product_element(product)
                 if product_data:
-                    products.append(product_data)
-                    console.print(f"[green]✅ Товар {idx+1}: {product_data['name'][:50]}...")
+                    # Дедуп по ссылке товара, если ссылка определена
+                    product_link = product_data.get('link')
+                    if product_link and product_link in self.seen_product_links:
+                        console.print(f"[yellow]⚠️ Дубликат товара пропущен: {product_link}")
+                    else:
+                        if product_link:
+                            self.seen_product_links.add(product_link)
+                        products.append(product_data)
+                        console.print(f"[green]✅ Товар {idx+1}: {product_data['name'][:50]}...")
                 else:
                     console.print(f"[yellow]⚠️ Товар {idx+1}: не удалось извлечь данные")
                 
@@ -458,63 +469,79 @@ class NovaskladParser:
             console.print(f"[yellow]⚠️ Не удалось проверить авторизацию: {e}")
         
         all_products = []
-        page = 1
-        max_pages = 50  # Ограничиваем количество страниц
+        current_url = self.catalog_url
+        max_pages = 100  # Жёсткий предел на всякий случай
+        page_number = 1
         
-        while page <= max_pages:
+        while current_url and page_number <= max_pages:
             try:
-                # Формируем URL страницы
-                if page == 1:
-                    page_url = self.catalog_url
-                else:
-                    # Пробуем разные форматы пагинации
-                    page_urls = [
-                        f"{self.catalog_url}?page={page}",
-                        f"{self.catalog_url}page/{page}/",
-                        f"{self.catalog_url}?p={page}",
-                        f"{self.catalog_url}?PAGEN_1={page}"
-                    ]
-                    
-                    # Пробуем первый формат
-                    page_url = page_urls[0]
+                # Защита от циклов по страницам
+                if current_url in self.visited_pages:
+                    console.print(f"[yellow]⚠️ Страница уже посещена, останавливаемся: {current_url}")
+                    break
+                self.visited_pages.add(current_url)
                 
-                console.print(f"[blue]📄 Страница {page}: {page_url}")
+                console.print(f"[blue]📄 Страница {page_number}: {current_url}")
                 
                 # Получаем содержимое страницы
-                html_content = self.get_page_content(page_url, f"Страница {page}")
+                html_content = self.get_page_content(current_url, f"Страница {page_number}")
                 
                 if not html_content:
-                    console.print(f"[yellow]⚠️ Не удалось загрузить страницу {page}")
+                    console.print(f"[yellow]⚠️ Не удалось загрузить страницу {page_number}")
                     break
                 
                 # Парсим товары на странице
                 page_products = self.parse_catalog_page(html_content)
                 
                 if not page_products:
-                    console.print(f"[yellow]⚠️ На странице {page} товары не найдены")
-                    # Пробуем альтернативный формат URL
-                    if page == 1:
+                    console.print(f"[yellow]⚠️ На странице {page_number} товары не найдены")
+                    # Попытка взять следующую ссылку
+                    soup_tmp = BeautifulSoup(html_content, 'html.parser')
+                    next_url_try = self.extract_next_page_url(soup_tmp, current_url)
+                    if not next_url_try:
                         break
-                    else:
-                        page += 1
+                    current_url = next_url_try
+                    page_number += 1
+                    time.sleep(1)
+                    continue
+                
+                # Добавляем только новые товары
+                new_count = 0
+                for p in page_products:
+                    link = p.get('link')
+                    if link and link in self.seen_product_links:
                         continue
+                    if link:
+                        self.seen_product_links.add(link)
+                    all_products.append(p)
+                    new_count += 1
                 
-                all_products.extend(page_products)
-                console.print(f"[green]✅ Страница {page}: найдено {len(page_products)} товаров")
+                console.print(f"[green]✅ Страница {page_number}: добавлено новых {new_count} товаров, всего {len(all_products)}")
                 
-                # Проверяем, есть ли следующая страница
-                soup = BeautifulSoup(html_content, 'html.parser')
-                next_page = soup.find('a', string=re.compile(r'следующая|next|>', re.I))
-                
-                if not next_page:
-                    console.print(f"[green]✅ Достигнут конец каталога на странице {page}")
+                # Если на странице не появилось новых товаров, выходим чтобы не зациклиться
+                if new_count == 0:
+                    console.print("[yellow]⚠️ Нет новых товаров на странице, останавливаемся")
                     break
                 
-                page += 1
+                # Пытаемся определить реальную ссылку на следующую страницу из HTML
+                soup = BeautifulSoup(html_content, 'html.parser')
+                next_url = self.extract_next_page_url(soup, current_url)
+                
+                if not next_url:
+                    console.print(f"[green]✅ Достигнут конец каталога на странице {page_number}")
+                    break
+                
+                # Если next ведет на уже посещенную страницу, прерываем
+                if next_url in self.visited_pages:
+                    console.print(f"[yellow]⚠️ Следующая страница уже посещена ({next_url}), останавливаемся")
+                    break
+                
+                current_url = next_url
+                page_number += 1
                 time.sleep(1)  # Небольшая пауза между запросами
                 
             except Exception as e:
-                console.print(f"[red]❌ Ошибка на странице {page}: {e}")
+                console.print(f"[red]❌ Ошибка на странице {page_number}: {e}")
                 break
         
         return all_products
@@ -815,6 +842,43 @@ class NovaskladParser:
         except Exception as e:
             console.print(f"[red]❌ Ошибка авторизации: {e}")
             return False
+
+    def extract_next_page_url(self, soup: BeautifulSoup, current_url: str):
+        """Ищем реальную ссылку на следующую страницу каталога"""
+        # 1) rel="next"
+        link = soup.find('a', rel=lambda v: v and 'next' in v.lower())
+        if link and link.get('href'):
+            href = link.get('href')
+            next_url = urljoin(self.base_url, href)
+            if next_url != current_url:
+                return next_url
+        
+        # 2) Кнопка со словом "Следующая" или стрелкой
+        link = soup.find('a', string=re.compile(r'^(Следующая|Далее|Next|›|>>)$', re.I))
+        if link and link.get('href'):
+            href = link.get('href')
+            next_url = urljoin(self.base_url, href)
+            if next_url != current_url:
+                return next_url
+        
+        # 3) Ссылки пагинации: ищем текущую активную и берём следующий элемент
+        active = soup.select_one('.pagination .active, .pagination .current, .nav .active')
+        if active:
+            next_sibling = active.find_next('a')
+            if next_sibling and next_sibling.get('href'):
+                next_url = urljoin(self.base_url, next_sibling.get('href'))
+                if next_url != current_url:
+                    return next_url
+        
+        # 4) Фолбек: ищем параметр page/PAGEN_1 в ссылках
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            if re.search(r'(page=\d+|PAGEN_1=\d+|/page/\d+/)', href, re.I):
+                next_url = urljoin(self.base_url, href)
+                if next_url != current_url:
+                    return next_url
+        
+        return None
 
 
 def main():
