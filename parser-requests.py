@@ -641,7 +641,9 @@ class NovaskladParser:
             # Ищем форму авторизации
             form = soup.find('form')
             if form:
-                console.print(f"[green]✅ Форма найдена: action='{form.get('action', 'Нет')}', method='{form.get('method', 'Нет')}'")
+                form_action = form.get('action', '')
+                form_method = form.get('method', 'post')
+                console.print(f"[green]✅ Форма найдена: action='{form_action}', method='{form_method}'")
                 
                 # Ищем все поля формы
                 form_inputs = form.find_all('input')
@@ -654,40 +656,13 @@ class NovaskladParser:
                     console.print(f"[blue]   {i+1}. type='{inp_type}', name='{inp_name}', value='{inp_value}', id='{inp_id}'")
             else:
                 console.print("[yellow]⚠️ Форма не найдена")
-            
-            # Ищем CSRF токен в разных местах
-            csrf_token = None
-            csrf_selectors = [
-                'input[name="_token"]',
-                'input[name="csrf_token"]',
-                'input[name="token"]',
-                'meta[name="csrf-token"]',
-                'input[type="hidden"]'
-            ]
-            
-            for selector in csrf_selectors:
-                try:
-                    csrf_elem = soup.select_one(selector)
-                    if csrf_elem:
-                        if csrf_elem.name == 'meta':
-                            csrf_token = csrf_elem.get('content')
-                        else:
-                            csrf_token = csrf_elem.get('value')
-                        if csrf_token:
-                            console.print(f"[green]✅ CSRF токен найден: {csrf_token[:20]}...")
-                            break
-                except:
-                    continue
+                return False
             
             # Формируем данные для авторизации
             auth_data = {
                 'login': self.login,
                 'password': self.password
             }
-            
-            # Добавляем CSRF токен если найден
-            if csrf_token:
-                auth_data['_token'] = csrf_token
             
             console.print("[blue]📤 Отправляем данные авторизации...")
             console.print(f"[blue]   Логин: {self.login}")
@@ -707,16 +682,16 @@ class NovaskladParser:
                 'Upgrade-Insecure-Requests': '1'
             }
             
-            # Пробуем разные методы авторизации
+            # Пробуем разные методы авторизации с правильным action
             auth_methods = [
-                # Метод 1: POST на /sign/
+                # Метод 1: POST на /sign/?in (правильный action формы)
+                ("https://novasklad.kz/sign/?in", auth_data),
+                # Метод 2: POST на /sign/ с параметром в data
+                ("https://novasklad.kz/sign/", {**auth_data, 'action': 'in'}),
+                # Метод 3: POST на /sign/ с параметром в URL
                 ("https://novasklad.kz/sign/", auth_data),
-                # Метод 2: POST на /login (если есть)
-                ("https://novasklad.kz/login", auth_data),
-                # Метод 3: POST на /auth (если есть)
-                ("https://novasklad.kz/auth", auth_data),
-                # Метод 4: POST на корневой URL
-                ("https://novasklad.kz/", auth_data)
+                # Метод 4: POST на корневой URL с параметром
+                ("https://novasklad.kz/?in", auth_data)
             ]
             
             auth_success = False
@@ -724,6 +699,7 @@ class NovaskladParser:
             for i, (auth_url, data) in enumerate(auth_methods):
                 try:
                     console.print(f"[blue]🔄 Метод {i+1}: POST на {auth_url}")
+                    console.print(f"[blue]   Данные: {data}")
                     
                     auth_response = self.session.post(
                         auth_url,
@@ -746,7 +722,8 @@ class NovaskladParser:
                         auth_success = True
                         break
                     elif auth_response.status_code == 200:
-                        if "Войти" not in auth_response.text and "login" not in auth_response.text.lower():
+                        # Проверяем, что мы больше не на странице входа
+                        if "Войти" not in auth_response.text and "Авторизоваться" not in auth_response.text:
                             console.print(f"[green]✅ Авторизация успешна!")
                             auth_success = True
                             break
@@ -770,15 +747,15 @@ class NovaskladParser:
                     submit_value = submit_button.get('value', '')
                     console.print(f"[blue]🔍 Найдена кнопка submit: name='{submit_name}', value='{submit_value}'")
                     
-                    # Добавляем данные кнопки
+                    # Добавляем данные кнопки если есть name
                     if submit_name:
                         auth_data[submit_name] = submit_value
                     
-                    # Пробуем еще раз с обновленными данными
-                    console.print("[blue]🔄 Пробуем повторную авторизацию с кнопкой...")
+                    # Пробуем еще раз с правильным action
+                    console.print("[blue]🔄 Пробуем повторную авторизацию с правильным action...")
                     try:
                         auth_response_final = self.session.post(
-                            "https://novasklad.kz/sign/",
+                            "https://novasklad.kz/sign/?in",  # Используем правильный action
                             data=auth_data,
                             headers=auth_headers,
                             timeout=30,
@@ -792,7 +769,7 @@ class NovaskladParser:
                         with open("auth_response_final.html", "w", encoding="utf-8") as f:
                             f.write(auth_response_final.text)
                         
-                        if "Войти" not in auth_response_final.text:
+                        if "Войти" not in auth_response_final.text and "Авторизоваться" not in auth_response_final.text:
                             console.print("[green]✅ Авторизация успешна при повторной попытке!")
                             auth_success = True
                         
@@ -809,7 +786,7 @@ class NovaskladParser:
             try:
                 # Пробуем получить главную страницу
                 main_page = self.session.get(self.base_url, timeout=30)
-                if "Войти" in main_page.text or "login" in main_page.text.lower():
+                if "Войти" in main_page.text or "Авторизоваться" in main_page.text:
                     console.print("[yellow]⚠️ Авторизация не подтверждена - все еще есть ссылка входа")
                     return False
                 else:
