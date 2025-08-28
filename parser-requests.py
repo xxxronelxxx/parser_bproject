@@ -21,6 +21,8 @@ from rich.table import Table
 
 console = Console()
 
+AVAILABLE_SEGMENT = 'available:is%7Cotw%7Cto/'
+
 class NovaskladParser:
     def __init__(self):
         self.session = requests.Session()
@@ -28,6 +30,8 @@ class NovaskladParser:
         
         # Загружаем ссылку на категорию из файла cat.txt
         self.catalog_url = self.load_catalog_url()
+        # Гарантируем, что в ссылке присутствует нужный сегмент доступности
+        self.catalog_url = self._ensure_available_segment(self.catalog_url)
         
         # Заголовки для имитации браузера
         self.headers = {
@@ -471,8 +475,8 @@ class NovaskladParser:
         except Exception as e:
             console.print(f"[yellow]⚠️ Не удалось проверить авторизацию: {e}")
         
-        # Включаем фильтры 'В пути' и 'Под заказ'
-        self.enable_status_filters()
+        # Включаем фильтры 'В пути' и 'Под заказ' (через сегмент пути)
+        # Сегмент уже добавлен к catalog_url, дополнительных действий не требуется
         
         all_products = []
         current_url = self.catalog_url
@@ -525,8 +529,8 @@ class NovaskladParser:
                     console.print(f"[green]✅ Достигнут конец каталога на странице {page_number}")
                     break
                 
-                # Гарантируем сохранение параметров фильтров в ссылке
-                next_url = self._merge_filter_params(next_url)
+                # Гарантируем сохранение сегмента доступности в ссылке
+                next_url = self._ensure_available_segment(next_url)
                 
                 # Если next ведет на уже посещенную страницу, прерываем
                 if next_url in self.visited_pages:
@@ -847,6 +851,7 @@ class NovaskladParser:
         if link and link.get('href'):
             href = link.get('href')
             next_url = urljoin(self.base_url, href)
+            next_url = self._ensure_available_segment(next_url)
             if next_url != current_url:
                 return next_url
         
@@ -855,6 +860,7 @@ class NovaskladParser:
         if link and link.get('href'):
             href = link.get('href')
             next_url = urljoin(self.base_url, href)
+            next_url = self._ensure_available_segment(next_url)
             if next_url != current_url:
                 return next_url
         
@@ -864,6 +870,7 @@ class NovaskladParser:
             next_sibling = active.find_next('a')
             if next_sibling and next_sibling.get('href'):
                 next_url = urljoin(self.base_url, next_sibling.get('href'))
+                next_url = self._ensure_available_segment(next_url)
                 if next_url != current_url:
                     return next_url
         
@@ -872,6 +879,7 @@ class NovaskladParser:
             href = a['href']
             if re.search(r'(page=\d+|PAGEN_1=\d+|/page/\d+/)', href, re.I):
                 next_url = urljoin(self.base_url, href)
+                next_url = self._ensure_available_segment(next_url)
                 if next_url != current_url:
                     return next_url
         
@@ -942,6 +950,21 @@ class NovaskladParser:
                 query_pairs.append((key, v))
         new_query = urlencode(query_pairs, doseq=True)
         return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
+
+    def _ensure_available_segment(self, url: str) -> str:
+        """Вставляет сегмент available:is%7Cotw%7Cto/ в путь URL, если его нет."""
+        parsed = urlparse(url)
+        path = parsed.path
+        # Нормализуем слеш на конце
+        if not path.endswith('/'):
+            path += '/'
+        if 'available:' not in path:
+            if not path.endswith('/'):
+                path += '/'
+            path = path + AVAILABLE_SEGMENT
+        # Убираем двойные слеши
+        path = path.replace('//', '/')
+        return urlunparse((parsed.scheme, parsed.netloc, path, parsed.params, parsed.query, parsed.fragment))
 
 
 def main():
