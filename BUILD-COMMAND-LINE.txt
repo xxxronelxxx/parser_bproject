@@ -1,0 +1,66 @@
+🚀 ПРОСТАЯ СБОРКА ЧЕРЕЗ КОМАНДНУЮ СТРОКУ
+==========================================
+
+❌ ПРОБЛЕМА: PyInstaller перезаписывает spec файл
+✅ РЕШЕНИЕ: Используем команду с явными параметрами
+
+📋 ПОШАГОВАЯ ИНСТРУКЦИЯ:
+
+1️⃣ ОТКРОЙТЕ КОМАНДНУЮ СТРОКУ:
+   - Win + R → cmd → Enter
+   - Перейдите в папку: cd /d D:\work\b-project.kz\git_parser
+
+2️⃣ ОЧИСТИТЕ СТАРЫЕ ФАЙЛЫ:
+   del NovaskladParser.exe
+   rmdir /s /q build
+   rmdir /s /q dist
+   del NovaskladParser.spec
+
+3️⃣ СОБЕРИТЕ EXE (скопируйте эту команду полностью):
+   pyinstaller --onefile --name=NovaskladParser --console --hidden-import=bs4 --hidden-import=bs4.builder --hidden-import=bs4.builder._lxml --hidden-import=lxml --hidden-import=lxml.etree --hidden-import=lxml.html --hidden-import=pandas --hidden-import=openpyxl --hidden-import=rich --hidden-import=rich.console --hidden-import=rich.progress --hidden-import=rich.panel --hidden-import=rich.table --hidden-import=requests --hidden-import=urllib3 --hidden-import=certifi --hidden-import=charset_normalizer --hidden-import=idna --hidden-import=chardet parser-requests.py
+
+4️⃣ КОПИРУЙТЕ EXE ФАЙЛ:
+   copy "dist\NovaskladParser.exe" "NovaskladParser.exe"
+
+5️⃣ ОЧИСТИТЕ ВРЕМЕННЫЕ ФАЙЛЫ:
+   rmdir /s /q build
+   rmdir /s /q dist
+
+🎯 ГОТОВО! Теперь у вас есть NovaskladParser.exe
+
+💡 АЛЬТЕРНАТИВНЫЙ СПОСОБ (если первый не работает):
+
+# Команда 1: С дополнительными параметрами
+pyinstaller --onefile --name=NovaskladParser --console --hidden-import=bs4 --hidden-import=bs4.builder --hidden-import=bs4.builder._lxml --hidden-import=lxml --hidden-import=lxml.etree --hidden-import=lxml.html --hidden-import=pandas --hidden-import=openpyxl --hidden-import=rich --hidden-import=rich.console --hidden-import=rich.progress --hidden-import=rich.panel --hidden-import=rich.table --hidden-import=requests --hidden-import=urllib3 --hidden-import=certifi --hidden-import=charset_normalizer --hidden-import=idna --hidden-import=chardet --exclude-module=pytest --exclude-module=matplotlib --exclude-module=numpy parser-requests.py
+
+# Команда 2: С collect-all (может работать лучше)
+pyinstaller --onefile --name=NovaskladParser --console --collect-all=bs4 --collect-all=lxml --collect-all=pandas --collect-all=openpyxl --collect-all=rich --collect-all=requests parser-requests.py
+
+# Команда 3: Простая (последний вариант)
+pyinstaller --onefile --name=NovaskladParser parser-requests.py
+
+🚨 ВАЖНЫЕ МОМЕНТЫ:
+
+✅ Копируйте команды полностью - не разрывайте их
+✅ Ждите завершения сборки (5-10 минут)
+✅ Проверяйте что EXE файл создался
+✅ Тестируйте EXE файл после сборки
+
+🔍 ЕСЛИ ВСЕ ЕЩЕ НЕ РАБОТАЕТ:
+
+1. Убедитесь что все зависимости установлены:
+   pip install -r requirements-requests.txt
+
+2. Попробуйте переустановить PyInstaller:
+   pip uninstall pyinstaller
+   pip install pyinstaller
+
+3. Проверьте версию Python (должна быть 3.7+):
+   python --version
+
+4. Попробуйте запустить от имени администратора
+
+📞 ПОМОЩЬ: Если ничего не помогает, используйте Python скрипт:
+python build_exe_fixed.py
+
+🎉 РЕЗУЛЬТАТ: Рабочий EXE файл со всеми модулями!

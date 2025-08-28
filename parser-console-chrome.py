@@ -1,11 +1,9 @@
 from selenium import webdriver
-from selenium.webdriver.edge.service import Service as EdgeService
+from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-# Убираем автоматическую загрузку драйвера
-# from webdriver_manager.microsoft import EdgeChromiumDriverManager
 import time
 import pandas as pd
 import re
@@ -24,9 +22,9 @@ def extract_article_from_name(product_name):
     return match.group(1) if match else None
 
 
-# Настройка Microsoft Edge в headless-режиме
+# Настройка Chrome в headless-режиме
 def setup_browser():
-    options = webdriver.EdgeOptions()
+    options = webdriver.ChromeOptions()
     options.add_argument("--headless=new")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
@@ -38,71 +36,46 @@ def setup_browser():
     options.add_argument("--disable-web-security")
     options.add_argument("--allow-running-insecure-content")
     options.add_argument("--disable-features=VizDisplayCompositor")
-    options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0")
+    options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     
-    # Показываем текущую рабочую директорию
-    current_dir = os.getcwd()
-    console.print(f"[blue]📁 Текущая рабочая директория: {current_dir}")
+    # Используем локальный драйвер Chrome
+    chrome_driver_path = "chromedriver.exe"  # Предполагаем, что драйвер в той же папке
     
-    # Используем локальный драйвер Edge вместо автоматической загрузки
-    # Путь к драйверу Edge (может потребоваться изменить)
-    edge_driver_path = "msedgedriver.exe"  # Предполагаем, что драйвер в той же папке
-    
-    console.print(f"[blue]🔍 Ищем файл: {edge_driver_path}")
-    console.print(f"[blue]🔍 Полный путь: {os.path.abspath(edge_driver_path)}")
-    
-    if os.path.exists(edge_driver_path):
-        console.print(f"[green]✅ Найден msedgedriver.exe в текущей папке")
-        service = EdgeService(edge_driver_path)
+    if os.path.exists(chrome_driver_path):
+        service = ChromeService(chrome_driver_path)
     else:
-        console.print(f"[yellow]⚠️ Файл {edge_driver_path} не найден в текущей папке")
-        
         # Альтернативные пути для Windows
         possible_paths = [
-            "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedgedriver.exe",
-            "C:\\Program Files\\Microsoft\\Edge\\Application\\msedgedriver.exe",
-            os.path.expanduser("~\\AppData\\Local\\Microsoft\\Edge\\Application\\msedgedriver.exe"),
-            "C:\\Windows\\System32\\msedgedriver.exe",
-            "C:\\Windows\\SysWOW64\\msedgedriver.exe"
+            "C:\\Program Files\\Google\\Chrome\\Application\\chromedriver.exe",
+            "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chromedriver.exe",
+            os.path.expanduser("~\\AppData\\Local\\Google\\Chrome\\Application\\chromedriver.exe"),
+            "C:\\Windows\\System32\\chromedriver.exe",
+            "C:\\Windows\\SysWOW64\\chromedriver.exe"
         ]
         
-        # Также проверим в текущей папке с разными вариантами имени
-        current_dir_paths = [
-            os.path.join(current_dir, "msedgedriver.exe"),
-            os.path.join(current_dir, "msedgedriver"),
-            os.path.join(current_dir, "msedgedriver.exe"),
-            os.path.join(current_dir, "driver", "msedgedriver.exe"),
-            os.path.join(current_dir, "drivers", "msedgedriver.exe")
-        ]
-        
-        # Объединяем все пути для поиска
-        all_paths = current_dir_paths + possible_paths
-        
-        edge_driver_path = None
-        for path in all_paths:
-            console.print(f"[blue]🔍 Проверяем путь: {path}")
+        chrome_driver_path = None
+        for path in possible_paths:
             if os.path.exists(path):
-                edge_driver_path = path
-                console.print(f"[green]✅ Найден msedgedriver.exe по пути: {path}")
+                chrome_driver_path = path
                 break
         
-        if edge_driver_path:
-            service = EdgeService(edge_driver_path)
+        if chrome_driver_path:
+            service = ChromeService(chrome_driver_path)
         else:
             # Если драйвер не найден, используем системный путь
-            console.print("[yellow]⚠️ Локальный драйвер Edge не найден, используем системный путь")
-            service = EdgeService()
+            console.print("[yellow]⚠️ Локальный драйвер Chrome не найден, используем системный путь")
+            service = ChromeService()
     
     try:
-        driver = webdriver.Edge(service=service, options=options)
+        driver = webdriver.Chrome(service=service, options=options)
         return driver
     except Exception as e:
-        console.print(f"[red]❌ Ошибка при запуске Edge: {e}")
+        console.print(f"[red]❌ Ошибка при запуске Chrome: {e}")
         console.print("[yellow]Пробуем альтернативный способ...")
         
         # Пробуем без headless режима
         try:
-            options = webdriver.EdgeOptions()
+            options = webdriver.ChromeOptions()
             options.add_argument("--disable-gpu")
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
@@ -113,24 +86,23 @@ def setup_browser():
             options.add_argument("--disable-web-security")
             options.add_argument("--allow-running-insecure-content")
             options.add_argument("--disable-features=VizDisplayCompositor")
-            options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0")
+            options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
             
-            driver = webdriver.Edge(service=service, options=options)
-            console.print("[green]✔️ Edge запущен в обычном режиме")
+            driver = webdriver.Chrome(service=service, options=options)
+            console.print("[green]✔️ Chrome запущен в обычном режиме")
             return driver
         except Exception as e2:
-            console.print(f"[red]❌ Не удалось запустить Edge: {e2}")
+            console.print(f"[red]❌ Не удалось запустить Chrome: {e2}")
             console.print("[yellow]Попробуйте:")
-            console.print("1. Установить Microsoft Edge браузер")
-            console.print("2. Скачать msedgedriver.exe с официального сайта")
-            console.print("3. Поместить msedgedriver.exe в папку с проектом")
-            console.print(f"4. Текущая папка: {current_dir}")
-            raise Exception("Не удалось запустить браузер Edge")
+            console.print("1. Установить Google Chrome браузер")
+            console.print("2. Скачать chromedriver.exe с официального сайта")
+            console.print("3. Поместить chromedriver.exe в папку с проектом")
+            raise Exception("Не удалось запустить браузер Chrome")
 
 
 # Основная функция парсинга
 def main():
-    console.print(Panel("[bold blue]Начало работы парсера", expand=False))
+    console.print(Panel("[bold blue]Начало работы парсера (Chrome версия)", expand=False))
 
     with Progress(
         SpinnerColumn(),
@@ -260,7 +232,7 @@ def main():
             # Этап 6: Сохранение данных
             task6 = progress.add_task("[purple]Сохранение данных...", total=100)
             df = pd.DataFrame(products)
-            df.to_excel("products_with_status.xlsx", index=False)
+            df.to_excel("products_with_status_chrome.xlsx", index=False)
             progress.update(task6, completed=100)
             console.print("[green]✔️ Данные успешно сохранены в Excel")
 
@@ -269,7 +241,7 @@ def main():
         finally:
             driver.quit()
             console.print("[green]✔️ Браузер закрыт")
-            console.print(Panel("[bold green]Готово! Все данные сохранены в 'products_with_status.xlsx'", expand=False))
+            console.print(Panel("[bold green]Готово! Все данные сохранены в 'products_with_status_chrome.xlsx'", expand=False))
 
 
 if __name__ == "__main__":
